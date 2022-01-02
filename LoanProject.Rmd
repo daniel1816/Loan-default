@@ -1,0 +1,364 @@
+---
+title: "Loan Default"
+---
+Introduction:
+    One common way the banks earn their profits is by lending money to the borrowers and earn interest from the loans. However, every business has its risks. The risk that is associated with commercial loans is that the banks may not receive the full amount of the money they lend to the borrowers back, which causes a significant financial loss. Banks can reduce this risk by raising the loan borrowing standards or requirements, such as applicants’ credit score, annual income, etc. However, the negative effect of doing so is it may also reduce the banks’ profitability. To best predict whether an applicant may or may not default on their loan is what most banks are currently trying to figure out.
+    Fortunately, we are in the age that data analysis and machine learning can help us do a lot of accurate predictions. In this case, we will be analyzing a data set of over 4,000 individuals who secured a personal loan in 2017 from a national bank. The data set includes information about the loan types such as loan amount and monthly payment, borrowers’ historical financial data such as annual income and debt-to-income ratio, and whether they defaulted on a loan or not. We will use data analysis to identify what are the major factors that influence a higher loan default and develop a machine learning model to predict whether a future customer will default on their loan. By understanding more about the causes of higher loan default rates, the bank can make better lending decisions to avoid financial risks and losses and maximize its profitability.  
+
+
+```{r warning = FALSE, message = FALSE}
+# Suppress dplyr summarise grouping warning messages
+options(dplyr.summarise.inform = FALSE)
+
+## Add R libraries here
+library(tidyverse)
+library(tidymodels)
+
+
+# Load data
+loans_df <- read_rds('C:/Users/danie/Desktop/Study/MIS431/finalproject/loan_data.rds')
+loans_df
+```
+
+
+
+**Are there differences in loan default rates by loan purpose?**
+
+**Answer**: Yes, the data indicates that credit card and medical loans have significantly larger default rates than any other type of loan. In fact, both of these loan types have default rates at more than 50%. This is nearly two times the average default rate for all other loan types.
+
+
+### Summary Table
+
+```{r echo = TRUE, fig.height=5, fig.width=9}
+loans_df %>%
+  group_by(loan_purpose) %>% 
+  summarise(n_customers = n(),
+            customers_default = sum(loan_default == 'yes'),
+            default_percent = 100 * mean(loan_default == 'yes'))
+```
+
+
+### Data Visulatization
+
+```{r echo = TRUE, fig.height=5, fig.width=9}
+default_rates <- loans_df %>%
+                 group_by(loan_purpose) %>% 
+                 summarise(n_customers = n(),
+                 customers_default = sum(loan_default == 'yes'),
+                 default_percent = 100 * mean(loan_default == 'yes'))
+
+
+ggplot(data = default_rates, mapping = aes(x = loan_purpose, y = default_percent)) +
+    geom_bar(stat = 'identity', fill = '#006EA2', color = 'white') +
+    labs(title = 'Loan Default Rate by Purpose of Loan',
+         x = 'Loan Purpose',
+         y = 'Default Percentage') +
+    theme_light()
+```
+
+
+
+**Question**:Is there a relationship between default rates and customers’ debt-to-income (dbi) ratio?
+
+
+**Answer**:Yes, the data indicates that customers with a higher dbi ratio tend to default on the loans. When customers' dbi ration is under 15, less than 30 percent of them defaulted on the loans. However, for the customers whose dbi ratio is over 30, more than half of them defaulted on the loan.
+###Data Summary Table
+```{r}
+dbi_df <- loans_df %>% 
+  mutate(dbi_category = cut(debt_to_income,
+                               breaks = c(-Inf, 15, 20, 25, 30, Inf),
+                               labels = c("Less than 15","15-20", "20-25", "25-30", 'Greater than 30'),
+                               right = TRUE)) %>%
+  group_by(dbi_category) %>% 
+  summarise(n_customer = n(),
+            customers_default = sum(loan_default == 'yes'),
+            default_percent = 100 * mean(loan_default=='yes'))
+dbi_df
+```
+
+###Data Visulization
+```{r}
+ggplot(dbi_df, aes(x = dbi_category, y = default_percent))+
+  geom_bar(stat = 'identity', fill = "006EA1", color = "white")+
+  coord_flip()+
+  labs(title = 'Loan Default Rate by Debt to Income Ratio',
+       x = 'DBI Ratio Range',
+       y = "Default Percentage")+
+  theme_light()
+                         
+  
+```
+
+
+**Question**:Is there a relationship between the loan interest rate and loan default?
+
+
+**Answer**:Yes, the data indicates that the customers who have a higher interest rate on their loan are more likely to default on the loan. The customers who defaulted on their loan have an average interest rate of 14.89%, which is over 5% higher than the average interest rate of the customers who didn't default on their loan. 
+
+### Data Summary Table
+```{r}
+loans_df %>% group_by(loan_default) %>% 
+  summarise(avg_interest_rate = mean(interest_rate),
+            min_interest_rate = min(interest_rate),
+            max_interest_rate = max(interest_rate))
+
+```
+
+### Data Visulatization
+```{r}
+ggplot(loans_df, aes(x = loan_default, y = interest_rate, fill = loan_default))+
+  geom_boxplot()+
+  labs(title = "Boxplot of Interest Rate by Status (loan dafault yes/no)",
+       x = "Loan Default",
+       y = "Interest Rate")
+```
+
+
+
+
+**Question**: Is there a relationship between customers defaulting on their loan and their loan term?
+
+
+**Answer**: Yes, the data indicates that customers with longer loan terms are likely to default on their loans. A five-year term loan has a 54% default rate. However, a three-year term loan has a 27% default rate.
+
+###Data Summary Table
+```{r}
+loans_df %>% group_by(term) %>% 
+  summarise(n_customers = n(),
+            customers_default = sum(loan_default == 'yes'),
+            default_percent = mean(loan_default == 'yes'))
+```
+
+###Data Visulization
+```{r}
+ggplot(loans_df, aes(x = term, fill = loan_default))+
+  geom_bar(stat = 'count', position = 'fill')+
+  labs(title = "Customers Default Status by Loan Term(three-year/five-year)",
+       x = "Loan Term",
+       y ="Porpotion of Default Status" )
+  
+  
+      
+
+```
+
+
+
+
+**Question**: When customers have the same loan term, does the total loan amount or the monthly payment amount has an impact on the default rates?
+
+
+**Answer**:Yes, the data below indicates that when the loan term is the same, customers who defaulted on the loan tend to have a higher monthly payment. However, their total loan amount is lower than the customers who did not default on the loan. The plot below also indicates that when the loan term and loan amount are the same, customers with a higher monthly payment amount tend to default on the loan. 
+
+###Data Summary Table
+```{r}
+loans_df %>% 
+  group_by(term, loan_default) %>% 
+  summarise(mean(installment),
+            mean(loan_amount),
+            mean(interest_rate),
+            mean(annual_income))
+           
+```
+
+###Data Visulization
+```{r}
+ggplot(loans_df, aes(x = loan_amount, y = installment, color = loan_default))+
+  geom_point()+
+  facet_wrap(~term)+
+  labs(title = "Total Loan Amount vs. Monthly Payment Amount",
+       x = "Total Loan AMount",
+       y = "Monthly Payment Amount")
+  
+```
+
+
+
+**Question**:Is there a relationship between customers' homeownership status and the loan default rates?
+
+
+**Answer**:Yes, the data indicates that customers who are renting a home have a loan default rate of 43% which is 10% and 5% higher than the customers who either have a mortgage or own a home respectively.
+
+###Data Summary Table
+```{r}
+loans_df %>% group_by(homeownership) %>% 
+  summarise(customers_nondefault = sum(loan_default == 'no'),
+            customers_default = sum(loan_default == 'yes'),
+            default_percent = mean(loan_default == 'yes'))
+```
+
+###Data Visulization
+```{r}
+ggplot(loans_df, aes(x = homeownership, fill = loan_default))+
+  geom_bar(stat = 'count', position = 'dodge')+
+  labs(title= 'Loan Default by Homeownership Status')+
+  theme_light()
+
+
+```
+Key findings:
+    First, based on the data analysis, we found that there is a linear relationship between loan default rates and the customers’ Debt-to-income (DBI) ratio. When customers’ DBI ratio is below 15, their default rates are around 28%. However, when customers’ DBI ratio is greater than 30%, their default rates increase to around 53%, which is almost double the customers whose DBI ratio is below 15.
+	  Second, among all loan types, medical and credit card loans are the riskiest ones. The data indicate that both have default rates at more than 50%. This is nearly two times the average default rate for all other loan types.
+    There is also a very strong correlation between the interest rate that customers received and whether they defaulted on their loans. The customers who did not default on their loans had an average interest rate of 9.3% and the customers who defaulted on their loans had an average interest rate of 14.9%.
+    In addition, customers’ homeownership status seems also a minor factor that influences the loan default rates. The data indicates that customers who are renting a home have a loan default rate of 43% which is 10% and 5% higher than the customers who either have a mortgage or own a home respectively.
+    Last but not the least, it is obvious that the customers with a longer loan term have a higher default rate. 55% of the customers who had a five-year loan term defaulted while only 27% of the customers who had a three-year loan tern defaulted. By digging further, when customers have the same loan term, the monthly payment amount is a greater influential factor than the total loan amount. The data indicates that when the loan term is the same, customers who defaulted on the loan tend to have a higher monthly payment. However, their total loan amount is lower than the customers who did not default on the loan.
+
+
+
+# Predictive Modeling 
+
+
+# Model 1 logistic Regression
+
+```{r}
+library(vip)
+set.seed(345)
+
+loans_split <- initial_split(loans_df, prop = 0.75,
+                             strate = loan_default)
+
+loans_training <- loans_split %>% training()
+
+loans_test <- loans_split %>% testing()
+
+
+loans_recipe <- recipe(loan_default ~ ., data = loans_training) %>% 
+                step_YeoJohnson(all_numeric(), -all_outcomes()) %>% 
+                step_normalize(all_numeric(), -all_outcomes()) %>% 
+                step_dummy(all_nominal(), -all_outcomes())
+
+loans_recipe %>% 
+  prep() %>% 
+  bake(new_data = loans_training)
+
+logistic_model <- logistic_reg() %>% 
+  set_engine('glm') %>% 
+  set_mode('classification')
+
+loans_wf <- workflow() %>% 
+            add_model(logistic_model) %>% 
+            add_recipe(loans_recipe)
+
+loan_logistic_fit <- loans_wf %>% 
+                      fit(data = loan_training)
+
+loan_training_model <- loan_logistic_fit %>% pull_workflow_fit()
+
+
+vip(loan_training_model)
+
+
+last_fit_model <- loans_wf %>% 
+                  last_fit(split = loans_split)
+
+last_fit_model %>% collect_metrics()
+
+last_fit_results <- last_fit_model %>% 
+                     collect_predictions()
+
+last_fit_results
+
+last_fit_results %>% 
+  roc_curve(truth = loan_default, estimate = .pred_yes) %>% 
+  autoplot()
+
+conf_mat(last_fit_results, truth = loan_default, estimate = .pred_class)
+
+f_meas(last_fit_results, truth = loan_default, estimate = .pred_class)
+                              
+
+```
+
+
+
+
+
+## Model 2 Random Forests
+```{r}
+library(rpart.plot)
+library(ranger)
+
+set.seed(345)
+
+loans_split <- initial_split(loans_df, prop = 0.75,
+                             strata = loan_default)
+
+loan_training <- loans_split %>% training()
+loan_test <- loans_split %>% testing()
+
+set.seed(345)
+
+loan_folds <- vfold_cv(loan_training, v = 5)
+
+loan_recipe <- recipe(loan_default ~., data = loan_training) %>% 
+  step_YeoJohnson(all_numeric(), -all_outcomes()) %>% 
+  step_normalize(all_numeric(), -all_outcomes()) %>% 
+  step_dummy(all_nominal(), -all_outcomes())
+
+rf_model <- rand_forest(mtry = tune(),
+                        trees = tune(),
+                        min_n = tune()) %>% 
+  set_engine('ranger', importance = 'impurity') %>% 
+  set_mode('classification')
+
+rf_workflow <- workflow() %>% 
+  add_model(rf_model) %>% 
+  add_recipe(loan_recipe)
+
+set.seed(345)
+
+rf_grid <- grid_random(mtry() %>% range_set(c(4,12)),
+                       trees(),
+                       min_n(),
+                       size = 8)
+rf_grid
+                        
+set.seed(345)
+
+rf_tuning <- rf_workflow %>% 
+             tune_grid(resamples = loan_folds,
+                       grid = rf_grid)
+rf_tuning %>% show_best('roc_auc')
+best_rf <- rf_tuning %>% 
+           select_best(metric = 'roc_auc')
+best_rf
+final_rf_workflow <- rf_workflow %>% 
+                     finalize_workflow(best_rf)
+
+rf_wf_fit <- final_rf_workflow %>% 
+             fit(data = loan_training)
+
+rf_fit <- rf_wf_fit %>% 
+          pull_workflow_fit()
+
+vip(rf_fit)
+
+rf_last_fit <- final_rf_workflow %>% 
+               last_fit(loans_split)
+
+rf_last_fit %>% collect_metrics()
+
+rf_last_fit %>% collect_predictions() %>% 
+                roc_curve(truth  = loan_default, estimate = .pred_yes) %>% 
+                autoplot()
+
+rf_predictions <- rf_last_fit %>% collect_predictions()
+
+conf_mat(rf_predictions, truth = loan_default, estimate = .pred_class)
+```
+
+
+**Summary**
+
+    In this analysis, we used Logistic Regression and Random Forest algorithms to predict whether a new customer may default on a loan in the future. As a result, Logistic Regression has a better accuracy of 94.4% than Random Forest which has 91.0%.
+    One way to evaluate how well the Logistic Regression model does in predicting the target variable is to use the confusion matrix. The results indicate that from a total of 1027 rows in our test data set, we have 968 correct predictions, which gives us an accuracy of 94.26%. From the wrong predictions, we have 30 false positives and 29 false negatives. This can be interpreted that from 1027 customers, we predicted that 30 of them may default on their loan but they actually do not and 29 of them may not default on their loan but they actually do default.
+
+Recommendations:
+    One of the major factors that cause higher loan default rates is the term of the loan as more than half of long-term loan borrowers defaulted on their loans. There are several things that the bank can do to reduce this risk caused by a long-term loan. First, to prevent the current risk, the bank can offer current long-term loan borrowers the opportunity to refinance to a short-term loan. Second, to reduce future risk, the bank should switch its business strategy to focus more on the short-term loan and issue a less long-term loan. Lastly, it should increase eligibility requirements for long-term loans to make sure the borrowers will repay the money on time.
+    Secondly, the debt burden affects loan repayment. When the bank checks the eligibility requirements, it should focus more on the customer’s debt-to-income ratio. When a customer’s DTI ratio is over 30, the bank should carefully review his or her other financial status profile before making a lending decision. For example, it could check the candidate’s employment information to determine whether he or she has a stable income or increase the credit score requirement for the loan. In addition to that, the bank should continue monitoring the financial status to make sure the customer’s repayment ability. 
+	  Lastly, the bank should consider modifying its loan product line to cut some loan products with high risk. Especially for the medical loan and the credit card loan whose default percentages are over 60%, the bank should conduct a detailed risk-return analysis. If the results show that they are not very profitable, the bank could cut these loan products and spend the resources on the more profitable products.
+    In summary, lending money is a risky business. Taking actions when a loan default has occurred is costly and puts the lender in a passive situation. Instead of reacting when defaults occur, using machine learning models to predict whether a customer may default on the loan or not is an effective approach. It helps the bank to anticipate any possible defaults so it can take proactive actions accordingly.
+ 
+
+
+
